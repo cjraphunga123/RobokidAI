@@ -40,11 +40,21 @@ jobs:
       - name: Build release App Bundle
         run: gradle bundleRelease
 
+      - name: Build release APK
+        run: gradle assembleRelease
+
       - name: Upload release App Bundle (unsigned; signing required before Play upload)
         uses: actions/upload-artifact@v4
         with:
           name: RoboKidAI-release-aab-unsigned
           path: app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Upload release APK (unsigned; signing required before publication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoboKidAI-release-apk-unsigned
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
 
       - name: Upload debug APK
