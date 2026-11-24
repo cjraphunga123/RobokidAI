@@ -310,6 +310,7 @@ private fun RoboKidHome() {
                 Spacer(Modifier.height(6.dp))
                 Text(kidsContentStatus, fontSize = 12.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
 
+                LearningCorner()
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = {
