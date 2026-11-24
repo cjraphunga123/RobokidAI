@@ -105,7 +105,19 @@ private fun RoboKidHome() {
                     listening = false
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     heardWords = matches?.firstOrNull().orEmpty()
-                    listeningStatus = if (heardWords.isNotBlank()) "I heard you! Tap the microphone to speak again." else "I didn't catch that. Please try again."
+                    if (heardWords.isNotBlank()) {
+                        listeningStatus = "I heard you! RoboKid is thinking…"
+                        val reply = createChildFriendlyReply(heardWords)
+                        val engine = speechEngine
+                        if (engine != null && speechReady) {
+                            engine.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "robokid-reply")
+                            listeningStatus = "RoboKid is replying…"
+                        } else {
+                            listeningStatus = "I heard you, but the robot voice is not ready yet."
+                        }
+                    } else {
+                        listeningStatus = "I didn't catch that. Please try again."
+                    }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {
                     val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
@@ -295,6 +307,28 @@ private fun RoboKidHome() {
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+private fun createChildFriendlyReply(input: String): String {
+    val words = input.lowercase(Locale.ROOT)
+    return when {
+        words.contains("hello") || words.contains("hi") || words.contains("hey") ->
+            "Hello, friend! I'm happy to talk with you. What would you like to learn today?"
+        words.contains("your name") || words.contains("who are you") ->
+            "I'm RoboKid, your friendly learning robot. I can help you explore ideas and learn new things."
+        words.contains("thank") ->
+            "You're very welcome! It's fun learning with you."
+        words.contains("joke") ->
+            "Why did the robot go on holiday? It needed to recharge! Would you like another joke?"
+        words.contains("animal") || words.contains("dog") || words.contains("cat") ->
+            "Animals are amazing! Dogs can learn many commands, and cats use their whiskers to sense spaces."
+        words.contains("math") || words.contains("add") || words.contains("plus") ->
+            "Let's learn together! Tell me the numbers in your question and we can work them out step by step."
+        words.contains("sad") || words.contains("scared") || words.contains("afraid") ->
+            "I'm sorry you're feeling that way. Please talk to a parent or trusted grown-up too. I'm here to listen."
+        else ->
+            "That's interesting! Can you tell me a little more? We can explore it together."
     }
 }
 
