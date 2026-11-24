@@ -3,6 +3,7 @@ package com.robokid.ai
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -69,6 +70,7 @@ private fun RoboKidHome() {
     var heardWords by rememberSaveable { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
     var listeningStatus by remember { mutableStateOf("Tap the microphone and say hello!") }
+    var kidsContentStatus by remember { mutableStateOf("Movies, cartoons and songs open in the YouTube Kids app.") }
 
     val recognizer = remember(context) {
         if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -285,6 +287,29 @@ private fun RoboKidHome() {
                     Text("RoboKid heard:", fontWeight = FontWeight.Bold, color = darkBlue)
                     Text(heardWords, fontSize = 18.sp, color = darkBlue, textAlign = TextAlign.Center)
                 }
+                Spacer(Modifier.height(20.dp))
+                Text("🎬  Movies & Music", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = darkBlue)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Watch child-friendly videos and listen to songs in YouTube Kids. A parent should set up and approve content there first.",
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = Color(0xFF52677F),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = {
+                        kidsContentStatus = openYouTubeKids(context)
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8A26))
+                ) {
+                    Text("▶  Open YouTube Kids", fontSize = 17.sp)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(kidsContentStatus, fontSize = 12.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
+
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = {
@@ -352,5 +377,37 @@ private fun startRoboKidListening(
         updateStatus("Starting microphone…")
     } catch (error: Exception) {
         updateStatus("I couldn't start listening. Please try again.")
+    }
+}
+
+
+private fun openYouTubeKids(context: android.content.Context): String {
+    val packageName = "com.google.android.apps.youtube.kids"
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+    if (launchIntent != null) {
+        return try {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(launchIntent)
+            "Opening YouTube Kids…"
+        } catch (error: Exception) {
+            openYouTubeKidsStore(context)
+        }
+    }
+    return openYouTubeKidsStore(context)
+}
+
+private fun openYouTubeKidsStore(context: android.content.Context): String {
+    val appUri = Uri.parse("market://details?id=com.google.android.apps.youtube.kids")
+    return try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, appUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        "YouTube Kids is not installed. Opening its app listing for a parent."
+    } catch (error: Exception) {
+        try {
+            val webUri = Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.youtube.kids")
+            context.startActivity(Intent(Intent.ACTION_VIEW, webUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "Opening the YouTube Kids app listing for a parent."
+        } catch (fallbackError: Exception) {
+            "YouTube Kids could not be opened on this phone."
+        }
     }
 }
