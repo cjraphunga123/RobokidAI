@@ -59,11 +59,7 @@ private fun RoboKidHome() {
     val speechEngine = remember(context) {
         TextToSpeech(context) { status ->
             speechReady = status == TextToSpeech.SUCCESS
-            if (status == TextToSpeech.SUCCESS) {
-                speechEngine.language = Locale.getDefault()
-                speechEngine.setSpeechRate(0.9f)
-                speechEngine.setPitch(1.05f)
-            }
+
         }
     }
 
@@ -76,6 +72,9 @@ private fun RoboKidHome() {
 
     LaunchedEffect(speechReady, greeted, childName) {
         if (speechReady && greeted && childName.isNotBlank()) {
+            speechEngine.language = Locale.getDefault()
+            speechEngine.setSpeechRate(0.9f)
+            speechEngine.setPitch(1.05f)
             speechEngine.speak(
                 "Hello, $childName! I'm RoboKid, your friendly robot. What can I help you with today?",
                 TextToSpeech.QUEUE_FLUSH,
