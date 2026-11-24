@@ -1,6 +1,7 @@
 package com.robokid.ai
 
 import android.os.Bundle
+import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -11,10 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +20,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,10 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,8 +51,39 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun RoboKidHome() {
+    val context = LocalContext.current
     var childName by rememberSaveable { mutableStateOf("") }
     var greeted by rememberSaveable { mutableStateOf(false) }
+    var speechReady by remember { mutableStateOf(false) }
+
+    val speechEngine = remember(context) {
+        TextToSpeech(context) { status ->
+            speechReady = status == TextToSpeech.SUCCESS
+            if (status == TextToSpeech.SUCCESS) {
+                speechEngine.language = Locale.getDefault()
+                speechEngine.setSpeechRate(0.9f)
+                speechEngine.setPitch(1.05f)
+            }
+        }
+    }
+
+    DisposableEffect(speechEngine) {
+        onDispose {
+            speechEngine.stop()
+            speechEngine.shutdown()
+        }
+    }
+
+    LaunchedEffect(speechReady, greeted, childName) {
+        if (speechReady && greeted && childName.isNotBlank()) {
+            speechEngine.speak(
+                "Hello, $childName! I'm RoboKid, your friendly robot. What can I help you with today?",
+                TextToSpeech.QUEUE_FLUSH,
+                null,
+                "robokid-greeting"
+            )
+        }
+    }
 
     val blue = Color(0xFF1769D2)
     val darkBlue = Color(0xFF123B72)
@@ -121,15 +154,28 @@ private fun RoboKidHome() {
                 )
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = { /* Voice conversation will be added in a later step. */ },
+                    onClick = {
+                        if (speechReady) {
+                            speechEngine.speak(
+                                "Hello, $childName! I'm RoboKid, your friendly robot. What can I help you with today?",
+                                TextToSpeech.QUEUE_FLUSH,
+                                null,
+                                "robokid-repeat-greeting"
+                            )
+                        }
+                    },
+                    enabled = speechReady,
                     modifier = Modifier.fillMaxWidth().height(58.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = blue)
                 ) {
-                    Text("🎤  Talk to RoboKid", fontSize = 18.sp)
+                    Text(if (speechReady) "🔊  Hear RoboKid speak" else "Preparing robot voice…", fontSize = 18.sp)
                 }
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = { greeted = false },
+                    onClick = {
+                        speechEngine.stop()
+                        greeted = false
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFE0ECFA),
                         contentColor = darkBlue
