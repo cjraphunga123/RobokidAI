@@ -1,10 +1,18 @@
 package com.robokid.ai
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
@@ -57,6 +66,69 @@ private fun RoboKidHome() {
     var speechReady by remember { mutableStateOf(false) }
     var speechStatus by remember { mutableStateOf("Preparing RoboKid's voice…") }
     var speechEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+    var heardWords by rememberSaveable { mutableStateOf("") }
+    var listening by remember { mutableStateOf(false) }
+    var listeningStatus by remember { mutableStateOf("Tap the microphone and say hello!") }
+
+    val recognizer = remember(context) {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) {
+            SpeechRecognizer.createSpeechRecognizer(context)
+        } else null
+    }
+
+    DisposableEffect(recognizer) {
+        if (recognizer != null) {
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    listening = true
+                    listeningStatus = "I'm listening…"
+                }
+                override fun onBeginningOfSpeech() {
+                    listeningStatus = "I can hear you…"
+                }
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    listening = false
+                    listeningStatus = "Working on your words…"
+                }
+                override fun onError(error: Int) {
+                    listening = false
+                    listeningStatus = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH -> "I didn't catch that. Please try again."
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "I didn't hear anything. Tap the microphone and try again."
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."
+                        else -> "Listening stopped. Please try again."
+                    }
+                }
+                override fun onResults(results: Bundle?) {
+                    listening = false
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    heardWords = matches?.firstOrNull().orEmpty()
+                    listeningStatus = if (heardWords.isNotBlank()) "I heard you! Tap the microphone to speak again." else "I didn't catch that. Please try again."
+                }
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                    if (!partial.isNullOrBlank()) heardWords = partial
+                }
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+        onDispose {
+            recognizer?.destroy()
+        }
+    }
+
+    val microphonePermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startRoboKidListening(recognizer) { listeningStatus = it }
+        } else {
+            listening = false
+            listeningStatus = "Microphone permission was not allowed. Ask a parent to enable it in Settings."
+        }
+    }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -74,16 +146,13 @@ private fun RoboKidHome() {
                         override fun onStart(utteranceId: String?) {
                             speechStatus = "RoboKid is speaking…"
                         }
-
                         override fun onDone(utteranceId: String?) {
                             speechStatus = "Ready to talk!"
                         }
-
                         @Deprecated("Deprecated in Java")
                         override fun onError(utteranceId: String?) {
                             speechStatus = "Voice playback failed. Check media volume."
                         }
-
                         override fun onError(utteranceId: String?, errorCode: Int) {
                             speechStatus = "Voice playback error ($errorCode). Check media volume."
                         }
@@ -168,22 +237,49 @@ private fun RoboKidHome() {
                     textAlign = TextAlign.Center,
                     color = darkBlue
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
                 Button(
                     onClick = { speakGreeting() },
                     enabled = speechReady,
-                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = blue)
                 ) {
-                    Text(if (speechReady) "🔊  Hear RoboKid speak" else "Preparing robot voice…", fontSize = 18.sp)
+                    Text(if (speechReady) "🔊  Hear RoboKid speak" else "Preparing robot voice…", fontSize = 17.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(speechStatus, fontSize = 13.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
+                Text(speechStatus, fontSize = 12.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
+
+                Spacer(Modifier.height(18.dp))
                 Button(
                     onClick = {
+                        if (recognizer == null) {
+                            listeningStatus = "Speech recognition is not available on this phone."
+                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                            startRoboKidListening(recognizer) { listeningStatus = it }
+                        } else {
+                            microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    enabled = !listening,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16845B))
+                ) {
+                    Text(if (listening) "🎤  Listening…" else "🎤  Talk to RoboKid", fontSize = 18.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(listeningStatus, fontSize = 13.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
+                if (heardWords.isNotBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("RoboKid heard:", fontWeight = FontWeight.Bold, color = darkBlue)
+                    Text(heardWords, fontSize = 18.sp, color = darkBlue, textAlign = TextAlign.Center)
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        recognizer?.cancel()
                         speechEngine?.stop()
                         greeted = false
+                        heardWords = ""
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0ECFA), contentColor = darkBlue)
                 ) {
@@ -191,7 +287,7 @@ private fun RoboKidHome() {
                 }
             }
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
             Text(
                 "A safe, parent-guided space to learn and explore.",
                 fontSize = 12.sp,
@@ -199,5 +295,28 @@ private fun RoboKidHome() {
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+private fun startRoboKidListening(
+    recognizer: SpeechRecognizer?,
+    updateStatus: (String) -> Unit
+) {
+    if (recognizer == null) {
+        updateStatus("Speech recognition is not available on this phone.")
+        return
+    }
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+        putExtra(RecognizerIntent.EXTRA_PROMPT, "Hello! What would you like to say?")
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+    }
+    try {
+        recognizer.startListening(intent)
+        updateStatus("Starting microphone…")
+    } catch (error: Exception) {
+        updateStatus("I couldn't start listening. Please try again.")
     }
 }
