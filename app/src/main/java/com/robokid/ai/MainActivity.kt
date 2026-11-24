@@ -2,6 +2,7 @@ package com.robokid.ai
 
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -21,7 +22,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,37 +55,73 @@ private fun RoboKidHome() {
     var childName by rememberSaveable { mutableStateOf("") }
     var greeted by rememberSaveable { mutableStateOf(false) }
     var speechReady by remember { mutableStateOf(false) }
+    var speechStatus by remember { mutableStateOf("Preparing RoboKid's voice…") }
+    var speechEngine by remember { mutableStateOf<TextToSpeech?>(null) }
 
-    val speechEngine = remember(context) {
-        TextToSpeech(context) { status ->
-            speechReady = status == TextToSpeech.SUCCESS
+    DisposableEffect(context) {
+        lateinit var engine: TextToSpeech
+        engine = TextToSpeech(context.applicationContext) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                val languageResult = engine.setLanguage(Locale.US)
+                if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                    languageResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    speechReady = false
+                    speechStatus = "English voice data is unavailable. Install an English voice in Text-to-speech settings."
+                } else {
+                    engine.setSpeechRate(0.88f)
+                    engine.setPitch(1.0f)
+                    engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {
+                            speechStatus = "RoboKid is speaking…"
+                        }
 
+                        override fun onDone(utteranceId: String?) {
+                            speechStatus = "Ready to talk!"
+                        }
+
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            speechStatus = "Voice playback failed. Check media volume."
+                        }
+
+                        override fun onError(utteranceId: String?, errorCode: Int) {
+                            speechStatus = "Voice playback error ($errorCode). Check media volume."
+                        }
+                    })
+                    speechEngine = engine
+                    speechReady = true
+                    speechStatus = "RoboKid's voice is ready."
+                }
+            } else {
+                speechReady = false
+                speechStatus = "Voice could not start. Check Android Text-to-speech settings."
+            }
         }
-    }
-
-    DisposableEffect(speechEngine) {
         onDispose {
-            speechEngine.stop()
-            speechEngine.shutdown()
-        }
-    }
-
-    LaunchedEffect(speechReady, greeted, childName) {
-        if (speechReady && greeted && childName.isNotBlank()) {
-            speechEngine.language = Locale.getDefault()
-            speechEngine.setSpeechRate(0.9f)
-            speechEngine.setPitch(1.05f)
-            speechEngine.speak(
-                "Hello, $childName! I'm RoboKid, your friendly robot. What can I help you with today?",
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "robokid-greeting"
-            )
+            speechReady = false
+            speechEngine = null
+            engine.stop()
+            engine.shutdown()
         }
     }
 
     val blue = Color(0xFF1769D2)
     val darkBlue = Color(0xFF123B72)
+
+    fun speakGreeting() {
+        val engine = speechEngine
+        if (!speechReady || engine == null) {
+            speechStatus = "RoboKid's voice is still preparing. Please wait and try again."
+            return
+        }
+        val message = "Hello, ${childName.trim()}! I'm RoboKid, your friendly robot. What can I help you with today?"
+        val result = engine.speak(message, TextToSpeech.QUEUE_FLUSH, null, "robokid-greeting")
+        if (result == TextToSpeech.ERROR) {
+            speechStatus = "I couldn't play the voice. Check your phone's media volume."
+        } else {
+            speechStatus = "Sending greeting to the speaker…"
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -98,25 +134,12 @@ private fun RoboKidHome() {
         ) {
             Text("🤖", fontSize = 88.sp)
             Spacer(Modifier.height(8.dp))
-            Text(
-                "RoboKid AI",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = darkBlue
-            )
-            Text(
-                "Your friendly learning companion",
-                color = Color(0xFF52677F),
-                textAlign = TextAlign.Center
-            )
+            Text("RoboKid AI", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = darkBlue)
+            Text("Your friendly learning companion", color = Color(0xFF52677F), textAlign = TextAlign.Center)
             Spacer(Modifier.height(28.dp))
 
             if (!greeted) {
-                Text(
-                    "What's your name?",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = darkBlue
-                )
+                Text("What's your name?", style = MaterialTheme.typography.titleLarge, color = darkBlue)
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = childName,
@@ -136,13 +159,7 @@ private fun RoboKidHome() {
                     Text("Meet my robot", fontSize = 17.sp)
                 }
             } else {
-                Text(
-                    "Hello, $childName! 👋",
-                    fontSize = 27.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = darkBlue,
-                    textAlign = TextAlign.Center
-                )
+                Text("Hello, ${childName.trim()}! 👋", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = darkBlue, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "I'm RoboKid, your friendly robot. What can I help you with today?",
@@ -153,32 +170,22 @@ private fun RoboKidHome() {
                 )
                 Spacer(Modifier.height(24.dp))
                 Button(
-                    onClick = {
-                        if (speechReady) {
-                            speechEngine.speak(
-                                "Hello, $childName! I'm RoboKid, your friendly robot. What can I help you with today?",
-                                TextToSpeech.QUEUE_FLUSH,
-                                null,
-                                "robokid-repeat-greeting"
-                            )
-                        }
-                    },
+                    onClick = { speakGreeting() },
                     enabled = speechReady,
                     modifier = Modifier.fillMaxWidth().height(58.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = blue)
                 ) {
                     Text(if (speechReady) "🔊  Hear RoboKid speak" else "Preparing robot voice…", fontSize = 18.sp)
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(speechStatus, fontSize = 13.sp, color = Color(0xFF52677F), textAlign = TextAlign.Center)
                 Spacer(Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        speechEngine.stop()
+                        speechEngine?.stop()
                         greeted = false
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE0ECFA),
-                        contentColor = darkBlue
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE0ECFA), contentColor = darkBlue)
                 ) {
                     Text("Change name")
                 }
