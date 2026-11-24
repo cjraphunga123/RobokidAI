@@ -383,31 +383,32 @@ private fun startRoboKidListening(
 
 private fun openYouTubeKids(context: android.content.Context): String {
     val packageName = "com.google.android.apps.youtube.kids"
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
-    if (launchIntent != null) {
-        return try {
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    return try {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
             context.startActivity(launchIntent)
-            "Opening YouTube Kids…"
-        } catch (error: Exception) {
+            "YouTube Kids is opening. If it does not appear, ask a parent to check that it is installed."
+        } else {
             openYouTubeKidsStore(context)
         }
+    } catch (error: Exception) {
+        openYouTubeKidsStore(context)
     }
-    return openYouTubeKidsStore(context)
 }
 
 private fun openYouTubeKidsStore(context: android.content.Context): String {
     val appUri = Uri.parse("market://details?id=com.google.android.apps.youtube.kids")
     return try {
-        context.startActivity(Intent(Intent.ACTION_VIEW, appUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        "YouTube Kids is not installed. Opening its app listing for a parent."
-    } catch (error: Exception) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, appUri))
+        "YouTube Kids is not installed. Opening its Play Store listing for a parent."
+    } catch (storeError: Exception) {
         try {
             val webUri = Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.apps.youtube.kids")
-            context.startActivity(Intent(Intent.ACTION_VIEW, webUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            "Opening the YouTube Kids app listing for a parent."
-        } catch (fallbackError: Exception) {
-            "YouTube Kids could not be opened on this phone."
+            context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
+            "Could not open the Play Store app. Trying the YouTube Kids listing in your browser."
+        } catch (browserError: Exception) {
+            val detail = browserError.localizedMessage ?: "No app can open the link"
+            "Could not open YouTube Kids or its listing: $detail. Ask a parent to install or update YouTube Kids."
         }
     }
 }
